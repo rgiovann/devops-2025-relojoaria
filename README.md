@@ -375,6 +375,6 @@ This project is proprietary software developed for +Devs2Blu educational purpose
 
 ---
 
-**Final Project for IaC Module of +Devs2Blu DevOps Program - 2025 Edition**
+**Final Project for IaC Module of +Devs2Blu DevOps Program | 2025 Edition**
 
 **Author: Giovanni Leopoldo Rozza**
