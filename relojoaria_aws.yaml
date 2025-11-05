@@ -1,0 +1,101 @@
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Stack que cria uma instancia EC2 Debian 12 para o projeto Joalheria
+  Inclui Security Group basico e IP publico explicito.
+  Região alvo: us-east-2.
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: ID da VPC existente onde a instancia sera criada.
+
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: Sub-rede onde a instancia sera provisionada.
+
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Nome do par de chaves SSH para acesso a instancia.
+
+Resources:
+
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Permite acesso SSH e HTTP a instancia EC2
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: leopoldo-ec2-sg-cloudformation
+
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-011e7b514a4f15472
+      InstanceType: t2.micro
+      KeyName: !Ref KeyName
+
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          SubnetId: !Ref SubnetId
+          AssociatePublicIpAddress: true
+          GroupSet:
+            - !Ref InstanceSecurityGroup
+
+      
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeType: gp3     # Melhor custo-benefício
+            VolumeSize: 8       # Mínimo necessário
+            DeleteOnTermination: true
+            
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          apt-get update -y
+          apt-get install -y docker.io git
+          systemctl start docker
+          systemctl enable docker
+          usermod -aG docker admin
+
+          docker container stop jewelry-app 2>/dev/null
+
+          cd /home/admin
+          rm -rf proway-docker/
+          git clone https://github.com/dartanghan/proway-docker.git
+          cd proway-docker/modulo7-iac_tooling
+
+          docker build -t jewelry-app .
+          docker run -d -p 8080:80 jewelry-app
+
+      Tags:
+        - Key: Name
+          Value: leopoldo-ec2-cloudformation
+
+Outputs:
+  InstanceId:
+    Description: ID da instancia EC2 criada
+    Value: !Ref EC2Instance
+
+  PublicIp:
+    Description: IP publico atribuido a instancia
+    Value: !GetAtt EC2Instance.PublicIp
+
+  PublicDns:
+    Description: DNS publico da instancia
+    Value: !GetAtt EC2Instance.PublicDnsName
+
+  SecurityGroupId:
+    Description: ID do Security Group criado
+    Value: !Ref InstanceSecurityGroup
