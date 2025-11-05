@@ -1,0 +1,74 @@
+name: Deploy Relojoaria AWS
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  cloudformation-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-2
+
+      - name: Save PEM private key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.PEM_RELOJOARIA }}" > ~/.ssh/leopoldo-final-iac.pem
+          chmod 600 ~/.ssh/leopoldo-final-iac.pem
+          echo "PEM key saved to ~/.ssh/leopoldo-final-iac.pem"
+
+      - name: Validate CloudFormation template
+        run: |
+          aws cloudformation validate-template \
+            --template-body file://relojoaria_aws.yaml
+
+      - name: Create or update CloudFormation stack
+        run: |
+          STACK_NAME=relojoaria-aws-stack
+          TEMPLATE_FILE=relojoaria_aws.yaml
+          VPC_ID=vpc-01367bb93348e0739
+          SUBNET_ID=subnet-07bb7ef82389821ab
+          KEY_NAME=leopoldo-final-iac
+
+          echo "Checking if stack exists..."
+          if aws cloudformation describe-stacks --stack-name $STACK_NAME >/dev/null 2>&1; then
+            echo "Stack exists, updating..."
+            aws cloudformation update-stack \
+              --stack-name $STACK_NAME \
+              --template-body file://$TEMPLATE_FILE \
+              --parameters \
+                ParameterKey=VpcId,ParameterValue=$VPC_ID \
+                ParameterKey=SubnetId,ParameterValue=$SUBNET_ID \
+                ParameterKey=KeyName,ParameterValue=$KEY_NAME \
+              --capabilities CAPABILITY_IAM || echo "No updates needed"
+            echo "Waiting for stack update..."
+            aws cloudformation wait stack-update-complete --stack-name $STACK_NAME || true
+          else
+            echo "Creating new stack..."
+            aws cloudformation create-stack \
+              --stack-name $STACK_NAME \
+              --template-body file://$TEMPLATE_FILE \
+              --parameters \
+                ParameterKey=VpcId,ParameterValue=$VPC_ID \
+                ParameterKey=SubnetId,ParameterValue=$SUBNET_ID \
+                ParameterKey=KeyName,ParameterValue=$KEY_NAME \
+              --capabilities CAPABILITY_IAM
+            echo "Waiting for stack creation..."
+            aws cloudformation wait stack-create-complete --stack-name $STACK_NAME
+          fi
+
+      - name: Get EC2 Public IP
+        run: |
+          PUBLIC_IP=$(aws cloudformation describe-stacks \
+            --stack-name relojoaria-aws-stack \
+            --query "Stacks[0].Outputs[?OutputKey=='PublicIp'].OutputValue" \
+            --output text)
+          echo "Application will be available soon at: http://$PUBLIC_IP:8080"

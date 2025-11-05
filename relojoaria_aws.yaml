@@ -3,7 +3,7 @@ AWSTemplateFormatVersion: "2010-09-09"
 Description: >
   Stack que cria uma instancia EC2 Debian 12 para o projeto Joalheria
   Inclui Security Group basico e IP publico explicito.
-  Região alvo: us-east-2.
+  Regiao alvo: us-east-2.
 
 Parameters:
   VpcId:
